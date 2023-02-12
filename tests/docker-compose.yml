@@ -2,7 +2,7 @@ version: "3"
 
 services:
     postgres:
-        image: postgres:${PGVERSION:-latest}
+        image: registry.gitlab.com/dalibo/postgresql_anonymizer:stable
         user: postgres
         command:
           - "postgres"
