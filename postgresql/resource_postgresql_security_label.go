@@ -57,13 +57,6 @@ func resourcePostgreSQLSecurityLabel() *schema.Resource {
 }
 
 func resourcePostgreSQLSecurityLabelCreate(db *DBConnection, d *schema.ResourceData) error {
-	if !db.featureSupported(featureServer) {
-		return fmt.Errorf(
-			"Foreign Server resource is not supported for this Postgres version (%s)",
-			db.version,
-		)
-	}
-
 	if err := createSecurityLabel(db, d); err != nil {
 		return err
 	}
@@ -72,46 +65,30 @@ func resourcePostgreSQLSecurityLabelCreate(db *DBConnection, d *schema.ResourceD
 }
 
 func resourcePostgreSQLSecurityLabelRead(db *DBConnection, d *schema.ResourceData) error {
-	if !db.featureSupported(featureServer) {
-		return fmt.Errorf(
-			"Foreign Server resource is not supported for this Postgres version (%s)",
-			db.version,
-		)
-	}
-	return nil
+	return resourcePostgreSQLSecurityLabelReadImpl(db, d)
 }
 
 func resourcePostgreSQLSecurityLabelExists(db *DBConnection, d *schema.ResourceData) (bool, error) {
-	var roleName string
-	err := db.QueryRow("SELECT rolname FROM pg_catalog.pg_roles WHERE rolname=$1", d.Id()).Scan(&roleName)
+	var rolName string
+	err := db.QueryRow("SELECT provider, label, rolname"+
+		" FROM pg_roles roles"+
+		" INNER JOIN pg_shseclabel label"+
+		" ON roles.oid = label.objoid"+
+		" WHERE rolname=$1", d.Get(objectNameAttr)).Scan(&rolName)
 	switch {
 	case err == sql.ErrNoRows:
 		return false, nil
 	case err != nil:
-		return false, err
+		return false, fmt.Errorf("Error reading info about security label: %s", err)
 	}
 
 	return true, nil
 }
 
 func resourcePostgreSQLSecurityLabelDelete(db *DBConnection, d *schema.ResourceData) error {
-	txn, _ := startTransaction(db.client, "")
-	b := bytes.NewBufferString("SECURITY LABEL ")
-
-	fmt.Fprint(b, "FOR ", d.Get(labelProviderAttr).(string))
-	fmt.Fprint(b, "ON ", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string))
-
-	fmt.Fprint(b, "IS ", "NULL")
-
-	sql := b.String()
-	if _, err := txn.Exec(sql); err != nil {
-		return fmt.Errorf("error creating security label on %s %s: %w", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string), err)
-	}
-
-	if err := txn.Commit(); err != nil {
+	if err := deleteSecurityLabel(db, d); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -126,6 +103,26 @@ func createSecurityLabel(db *DBConnection, d *schema.ResourceData) error {
 	secLabelSQL := b.String()
 	if _, err := txn.Exec(secLabelSQL); err != nil {
 		return fmt.Errorf("error creating security label on %s %s: %w", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string), err)
+	}
+
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func deleteSecurityLabel(db *DBConnection, d *schema.ResourceData) error {
+	txn, _ := startTransaction(db.client, "")
+	b := bytes.NewBufferString("SECURITY LABEL ")
+
+	fmt.Fprint(b, "FOR ", d.Get(labelProviderAttr).(string))
+	fmt.Fprint(b, "ON ", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string))
+	fmt.Fprint(b, "IS ", "NULL")
+
+	secLabelSQL := b.String()
+	if _, err := txn.Exec(secLabelSQL); err != nil {
+		return fmt.Errorf("error deleting security label on %s %s: %w", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string), err)
 	}
 
 	if err := txn.Commit(); err != nil {

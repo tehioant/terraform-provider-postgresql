@@ -19,7 +19,7 @@ resource "postgresql_security_label" "basic_security_label" {
 	
 }
 `
-	_, teardown := setupTestDatabase(t, false, true)
+	_, teardown := setupTestDatabase(t, true, true)
 	defer teardown()
 
 	createTestRole(t, name)
