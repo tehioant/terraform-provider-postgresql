@@ -4,14 +4,11 @@ services:
     postgres:
         image: postgres:${PGVERSION:-latest}
         user: postgres
-        command:
-          - "postgres"
-          - "-c"
-          - "wal_level=logical"
-          - "-c"
-          - "max_replication_slots=10"
+        command: /bin/bash -c "/tmp/load-anon.sh"
         environment:
             POSTGRES_PASSWORD: ${PGPASSWORD}
+        volumes:
+          - /Users/a.tehio-pesselet/Documents/Personal Project/terraform-provider-postgresql/tests/anon/load-anon.sh:/tmp/load-anon.sh:ro
         ports:
             - 25432:5432
         healthcheck:
@@ -19,3 +16,6 @@ services:
           interval: 10s
           timeout: 5s
           retries: 5
+
+#        volumes:
+#          - ./anon/anon-init.sql/docker-entrypoint-initdb.d/anon-init.sql:

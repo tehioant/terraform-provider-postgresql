@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	labelProviderAttr = "label_provider"
-	labelNameAttr     = "label"
-	objectTypeAttr    = "type"
-	objectNameAttr    = "name"
+	securityLabelProviderAttr = "label_provider"
+	securityLabelNameAttr     = "label"
+	securityObjectTypeAttr    = "type"
+	securityObjectNameAttr    = "name"
 )
 
 /* NOT SUPPORTED:
@@ -30,24 +30,24 @@ func resourcePostgreSQLSecurityLabel() *schema.Resource {
 			StateContext: schema.ImportStatePassthroughContext,
 		},
 		Schema: map[string]*schema.Schema{
-			labelProviderAttr: {
+			securityLabelProviderAttr: {
 				Type:        schema.TypeString,
 				Required:    true,
-				Description: "TTeh name of the provider",
+				Description: "The name of the provider",
 				ForceNew:    true,
 			},
-			labelNameAttr: {
+			securityLabelNameAttr: {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "The name of the object to be labeled (tables, functions, etc.) or NULL to drop the security label.",
 				ForceNew:    true,
 			},
-			objectTypeAttr: {
+			securityObjectTypeAttr: {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			objectNameAttr: {
+			securityObjectNameAttr: {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
@@ -74,7 +74,7 @@ func resourcePostgreSQLSecurityLabelExists(db *DBConnection, d *schema.ResourceD
 		" FROM pg_roles roles"+
 		" INNER JOIN pg_shseclabel label"+
 		" ON roles.oid = label.objoid"+
-		" WHERE rolname=$1", d.Get(objectNameAttr)).Scan(&rolName)
+		" WHERE rolname=$1", d.Get(securityObjectNameAttr)).Scan(&rolName)
 	switch {
 	case err == sql.ErrNoRows:
 		return false, nil
@@ -96,13 +96,13 @@ func createSecurityLabel(db *DBConnection, d *schema.ResourceData) error {
 	txn, _ := startTransaction(db.client, "")
 	b := bytes.NewBufferString("SECURITY LABEL")
 
-	fmt.Fprint(b, " FOR ", d.Get(labelProviderAttr).(string))
-	fmt.Fprint(b, " ON ", d.Get(objectTypeAttr).(string), " ", d.Get(objectNameAttr).(string))
-	fmt.Fprint(b, " IS ", d.Get(labelNameAttr).(string))
+	fmt.Fprint(b, " FOR ", d.Get(securityLabelProviderAttr).(string))
+	fmt.Fprint(b, " ON ", d.Get(securityObjectTypeAttr).(string), " ", d.Get(securityObjectNameAttr).(string))
+	fmt.Fprint(b, " IS ", d.Get(securityLabelNameAttr).(string))
 
 	secLabelSQL := b.String()
 	if _, err := txn.Exec(secLabelSQL); err != nil {
-		return fmt.Errorf("error creating security label on %s %s: %w", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string), err)
+		return fmt.Errorf("error creating security label on %s %s: %w", d.Get(securityObjectTypeAttr).(string), d.Get(securityObjectNameAttr).(string), err)
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -113,16 +113,21 @@ func createSecurityLabel(db *DBConnection, d *schema.ResourceData) error {
 }
 
 func deleteSecurityLabel(db *DBConnection, d *schema.ResourceData) error {
-	txn, _ := startTransaction(db.client, "")
+	txn, err := startTransaction(db.client, "")
+	if err != nil {
+		return err
+	}
+	defer deferredRollback(txn)
+
 	b := bytes.NewBufferString("SECURITY LABEL ")
 
-	fmt.Fprint(b, "FOR ", d.Get(labelProviderAttr).(string))
-	fmt.Fprint(b, "ON ", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string))
+	fmt.Fprint(b, "FOR ", d.Get(securityLabelProviderAttr).(string))
+	fmt.Fprint(b, "ON ", d.Get(securityObjectTypeAttr).(string), d.Get(securityObjectNameAttr).(string))
 	fmt.Fprint(b, "IS ", "NULL")
 
 	secLabelSQL := b.String()
 	if _, err := txn.Exec(secLabelSQL); err != nil {
-		return fmt.Errorf("error deleting security label on %s %s: %w", d.Get(objectTypeAttr).(string), d.Get(objectNameAttr).(string), err)
+		return fmt.Errorf("error deleting security label on %s %s: %w", d.Get(securityObjectTypeAttr).(string), d.Get(securityObjectNameAttr).(string), err)
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -164,10 +169,10 @@ func resourcePostgreSQLSecurityLabelReadImpl(db *DBConnection, d *schema.Resourc
 		return fmt.Errorf("Error reading security label: %w", err)
 	}
 
-	d.Set(labelProviderAttr, provider)
-	d.Set(labelNameAttr, label)
-	d.Set(objectTypeAttr, "ROLE")
-	d.Set(objectNameAttr, name)
+	d.Set(securityLabelProviderAttr, provider)
+	d.Set(securityLabelNameAttr, label)
+	d.Set(securityObjectTypeAttr, "ROLE")
+	d.Set(securityObjectNameAttr, name)
 	d.SetId(name)
 
 	return nil
